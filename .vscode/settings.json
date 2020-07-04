@@ -1,0 +1,12 @@
+{
+  "files.exclude": {
+    ".vscode": true,
+    "target": true,
+    "Cargo.lock": true,
+    ".gitignore": true
+},
+"editor.insertSpaces": false,
+"files.autoSave": "afterDelay",
+"editor.comments.insertSpace": false,
+"editor.detectIndentation": false
+}
