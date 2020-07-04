@@ -73,7 +73,8 @@ fn main() {
 
 	let state = GameState::new();
 
-	let 
+	let mut fps = 0;
+	let mut timer = std::time::Instant::now();
 
 	event_loop.run(move |event, _, control_flow| {
 
@@ -98,7 +99,19 @@ fn main() {
 				}
 			},
 
-			Event::MainEventsCleared =>  { window.request_redraw(); },
+			Event::MainEventsCleared =>  {
+				window.request_redraw();
+				fps += 1;
+
+				let now = std::time::Instant::now();
+
+				if now.duration_since(timer).as_secs() >= 1 {
+					println!("fps : {}", fps);
+					fps = 0;
+					timer = now;
+				}
+
+			},
 
 			Event::RedrawRequested(_) => draw(&mut renderer, &state),
 
