@@ -77,7 +77,7 @@ struct Vertex {
 
 impl Vertex {
 	
-	fn load_mesh(filename : &str) -> (Vec<Vertex>, Vec<u32>) {
+	fn load_mesh(filename : &str, scale : f32) -> (Vec<Vertex>, Vec<u32>) {
 		let obj = tobj::load_obj(filename, true).expect(format!("{}{}{}\n", "Missing asset :'", filename, "'").as_str());
 		
 		let (mut models, _materials) = obj;
@@ -92,7 +92,7 @@ impl Vertex {
 
 		let mut verts : Vec<Vertex> = Vec::with_capacity(length);
 
-		let mut position_iter = mesh.positions.iter().map(|x| 0.5 * x);
+		let mut position_iter = mesh.positions.iter().map(|x| scale * x);
 		let normals = mesh.normals;
 
 		for i in 0..length / 3 {
@@ -464,7 +464,7 @@ async fn entry(event_loop : winit::event_loop::EventLoop<()>, window : winit::wi
 
 	let mut state = {
 
-		let (verts, indices) = Vertex::load_mesh("data/floater.obj");
+		let (verts, indices) = Vertex::load_mesh("data/floater.obj", 0.5);
 
 		let vertices : &[Vertex] = verts.as_slice();
 

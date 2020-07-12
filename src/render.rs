@@ -16,6 +16,8 @@ pub struct Renderer {
 
 impl Renderer {
 
+	const DEPTH_FORMAT : wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
+
 	pub async fn new<T>(win : &winit::window::Window, vertex_descs : &[wgpu::VertexBufferDescriptor<'_>], vertex_uniform : &[T]) -> Self{
 
 		let win_size = win.inner_size();
