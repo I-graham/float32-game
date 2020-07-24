@@ -2,7 +2,8 @@
   "files.exclude": {
     "Cargo.lock": true,
     ".gitignore": true,
-    "target": true
+    "target": true,
+    ".vscode": true
   },
   "editor.insertSpaces": false,
   "files.autoSave": "afterDelay",

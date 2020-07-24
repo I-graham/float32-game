@@ -11,7 +11,7 @@ pub struct Renderer {
 	pub pipeline     : wgpu::RenderPipeline,
 	pub uniform_bg   : wgpu::BindGroup,
 	pub uniform_buf  : wgpu::Buffer,
-	pub instance_buf : wgpu::Buffer,
+	pub instance_bgl : wgpu::BindGroupLayout,
 
 	pub depth_buffer : (wgpu::Texture, wgpu::TextureView)
 	
@@ -19,8 +19,6 @@ pub struct Renderer {
 }
 
 impl Renderer {
-
-	pub const INSTANCE_SIZE : wgpu::BufferAddress = 64 * 32 as wgpu::BufferAddress;
 
 	pub async fn new<T>(win : &winit::window::Window, vertex_descs : &[wgpu::VertexBufferDescriptor<'_>], vertex_uniform : &[T]) -> Self{
 		
@@ -71,25 +69,10 @@ impl Renderer {
 						dynamic : false,
 					},
 				},
-				wgpu::BindGroupLayoutEntry {
-					binding : 1,
-					visibility : wgpu::ShaderStage::VERTEX,
-					ty : wgpu::BindingType::StorageBuffer {
-						dynamic : false,
-						readonly : true,
-					},
-				},
 			],
 			label: Some("uniform_layout"),
 		});
 		
-		let instance_buf = device.create_buffer( &wgpu::BufferDescriptor {
-			label : Some("Instance Buffer"),
-			size : Renderer::INSTANCE_SIZE,
-			usage : wgpu::BufferUsage::COPY_DST
-				| wgpu::BufferUsage::STORAGE_READ,
-		});
-
 		let uniform_bg = device.create_bind_group(&wgpu::BindGroupDescriptor {
 			layout: &uniforms_layout,
 			bindings : &[
@@ -100,17 +83,24 @@ impl Renderer {
 						range: 0..std::mem::size_of_val(vertex_uniform) as wgpu::BufferAddress,
 					}
 				},
-				wgpu::Binding {
-					binding : 1,
-					resource : wgpu::BindingResource::Buffer {
-						buffer : &instance_buf,
-						range : 0..Renderer::INSTANCE_SIZE,
+				],
+				label: Some("uniform_bg"),
+		});
+			
+		let instance_bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+			bindings : &[
+				wgpu::BindGroupLayoutEntry {
+					binding : 0,
+					visibility : wgpu::ShaderStage::VERTEX,
+					ty : wgpu::BindingType::StorageBuffer {
+						dynamic : false,
+						readonly : true,
 					},
 				},
 			],
-			label: Some("uniform_vertices"),
+			label : Some("instances")
 		});
-		
+			
 		let depth_buffer = Texture::create_depth_texture(&device, &sc_desc);
 		
 		let pipeline = {
@@ -119,7 +109,7 @@ impl Renderer {
 			let fragshader = Renderer::shader_module(&device, std::path::Path::new("src/shaders/default.frag.spv"));
 			
 			let layout = &device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-				bind_group_layouts: &[&uniforms_layout],
+				bind_group_layouts: &[&uniforms_layout, &instance_bgl],
 			});
 			
 			device.create_render_pipeline(
@@ -190,7 +180,7 @@ impl Renderer {
 			uniform_bg,
 			uniform_buf,
 			depth_buffer,
-			instance_buf,
+			instance_bgl,
 		}
 		
 	}

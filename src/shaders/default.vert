@@ -17,7 +17,7 @@ uniform Uniforms {
 	vec3 light_col;
 };
 
-layout(set=0, binding=1)
+layout(set=1, binding=0)
 buffer Instances {
 	mat4 models[];
 };

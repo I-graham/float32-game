@@ -56,7 +56,7 @@ impl Instance {
 struct Model {
 	mesh : (wgpu::Buffer, wgpu::Buffer, u32, u32),
 	instances : Vec<cgmath::Matrix4<f32>>,
-	visible : bool,
+	bind_group : Option<wgpu::BindGroup>,
 }
 
 impl Model {
@@ -80,7 +80,7 @@ impl Model {
 		Self {
 			mesh,
 			instances,
-			visible : true,
+			bind_group : None,
 		}
 
 	}
@@ -254,7 +254,6 @@ impl GameState {
 		if let Stage::Menu = self.stage {
 			
 			let frame = self.renderer.swap.get_next_texture().unwrap();
-			
 			{
 
 				let num_boats = self.boats.len();
@@ -270,99 +269,75 @@ impl GameState {
 			}
 				
 			let mut encoder = self.renderer.begin();
+			
+			let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+				color_attachments : &[wgpu::RenderPassColorAttachmentDescriptor {
+					attachment : &frame.view,
+					resolve_target : None,
+					load_op: wgpu::LoadOp::Clear,
+					store_op: wgpu::StoreOp::Store,
+					clear_color: wgpu::Color {
+						r: 0.0,
+						g: 0.8,
+						b: 1.0,
+						a: 1.0,
+					},
+					}],
+				depth_stencil_attachment: Some( wgpu::RenderPassDepthStencilAttachmentDescriptor {
+					attachment : &self.renderer.depth_buffer.1,
+					depth_load_op : wgpu::LoadOp::Clear,
+					depth_store_op : wgpu::StoreOp::Store,
+					clear_depth : 1.0,
+					stencil_load_op : wgpu::LoadOp::Clear,
+					stencil_store_op : wgpu::StoreOp::Store,
+					clear_stencil : 0,
+				}),
+			});
 
-			{
-				let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-					color_attachments : &[wgpu::RenderPassColorAttachmentDescriptor {
-						attachment : &frame.view,
-						resolve_target : None,
-						load_op: wgpu::LoadOp::Clear,
-						store_op: wgpu::StoreOp::Store,
-						clear_color: wgpu::Color {
-							r: 0.0,
-							g: 0.8,
-							b: 1.0,
-							a: 1.0,
-						},
-						}],
-					depth_stencil_attachment: Some( wgpu::RenderPassDepthStencilAttachmentDescriptor {
-						attachment : &self.renderer.depth_buffer.1,
-						depth_load_op : wgpu::LoadOp::Clear,
-						depth_store_op : wgpu::StoreOp::Store,
-						clear_depth : 1.0,
-						stencil_load_op : wgpu::LoadOp::Clear,
-						stencil_store_op : wgpu::StoreOp::Store,
-						clear_stencil : 0,
-					}),
-				});
-
-				render_pass.set_pipeline(&self.renderer.pipeline);
-
-				render_pass.set_bind_group(0, &self.renderer.uniform_bg, &[]);
-
-				render_pass.draw(0..0, 0..1);
-
-			}
-
-			for model in self.scene.objects.values() {
-
-				if !model.visible {
-					continue
-				}
-
+			render_pass.set_pipeline(&self.renderer.pipeline);
+			
+			for model in self.scene.objects.values_mut().filter(|model| model.instances.len() != 0) {
+				
 				let instances = &model.instances;
-
-				let instance_buf = self.renderer.device.create_buffer_with_data(
-					render::to_char_slice(instances.as_slice()),
-					wgpu::BufferUsage::COPY_SRC
+				
+				let instance_slice = render::to_char_slice(instances.as_slice());
+				
+				let instance_buff = self.renderer.device.create_buffer_with_data(
+					instance_slice,
+					wgpu::BufferUsage::UNIFORM | wgpu::BufferUsage::STORAGE_READ,
 				);
-
-				encoder.copy_buffer_to_buffer(
-					&instance_buf,
-					0 as wgpu::BufferAddress,
-					&self.renderer.instance_buf,
-					0 as wgpu::BufferAddress,
-					render::Renderer::INSTANCE_SIZE,
-				);
-
-				let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-					color_attachments : &[wgpu::RenderPassColorAttachmentDescriptor {
-						attachment : &frame.view,
-						resolve_target : None,
-						load_op: wgpu::LoadOp::Load,
-						store_op: wgpu::StoreOp::Store,
-						clear_color: wgpu::Color {
-							r: 0.0,
-							g: 0.8,
-							b: 1.0,
-							a: 1.0,
-						},
-						}],
-					depth_stencil_attachment: Some( wgpu::RenderPassDepthStencilAttachmentDescriptor {
-						attachment : &self.renderer.depth_buffer.1,
-						depth_load_op : wgpu::LoadOp::Load,
-						depth_store_op : wgpu::StoreOp::Store,
-						clear_depth : 1.0,
-						stencil_load_op : wgpu::LoadOp::Clear,
-						stencil_store_op : wgpu::StoreOp::Store,
-						clear_stencil : 0,
-					}),
-				});
-
-				render_pass.set_pipeline(&self.renderer.pipeline);
+				
+				model.bind_group = Some(self.renderer.device.create_bind_group(&wgpu::BindGroupDescriptor{
+					layout : &self.renderer.instance_bgl,
+					bindings : &[
+						wgpu::Binding {
+							binding : 0,
+							resource : wgpu::BindingResource::Buffer {
+								buffer : &instance_buff,
+								range : 0..instance_slice.len() as wgpu::BufferAddress,
+							},
+						}
+				],
+					label : None,
+				}));
+									
+				let mesh = &model.mesh;
+				
+				let instances = &model.instances;	
 				
 				render_pass.set_bind_group(0, &self.renderer.uniform_bg, &[]);
-
-				let mesh = &model.mesh;
-
+				
+				render_pass.set_bind_group(1, model.bind_group.as_ref().unwrap(), &[]);
+				
 				render_pass.set_vertex_buffer(0, &mesh.0, 0, 0);
-
+				
 				render_pass.set_index_buffer(&mesh.1, 0, 0);
-
+				
 				render_pass.draw_indexed(0..mesh.3, 0, 0..instances.len() as u32);
-
-				drop(render_pass);
+				
 			}
+
+			drop(render_pass);
 
 			use wgpu_glyph::{ab_glyph, GlyphBrushBuilder, Section, Text, Layout, HorizontalAlign};
 
@@ -401,95 +376,75 @@ impl GameState {
 
 			let mut encoder = self.renderer.begin();
 
-			{
-				let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-					color_attachments : &[wgpu::RenderPassColorAttachmentDescriptor {
-						attachment : &frame.view,
-						resolve_target : None,
-						load_op: wgpu::LoadOp::Clear,
-						store_op: wgpu::StoreOp::Store,
-						clear_color: wgpu::Color {
-							r: 0.0,
-							g: 0.8,
-							b: 1.0,
-							a: 1.0,
-						},
-						}],
-					depth_stencil_attachment: Some( wgpu::RenderPassDepthStencilAttachmentDescriptor {
-						attachment : &self.renderer.depth_buffer.1,
-						depth_load_op : wgpu::LoadOp::Clear,
-						depth_store_op : wgpu::StoreOp::Store,
-						clear_depth : 1.0,
-						stencil_load_op : wgpu::LoadOp::Clear,
-						stencil_store_op : wgpu::StoreOp::Store,
-						clear_stencil : 0,
-					}),
-				});
+			let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+				color_attachments : &[wgpu::RenderPassColorAttachmentDescriptor {
+					attachment : &frame.view,
+					resolve_target : None,
+					load_op: wgpu::LoadOp::Clear,
+					store_op: wgpu::StoreOp::Store,
+					clear_color: wgpu::Color {
+						r: 0.0,
+						g: 0.8,
+						b: 1.0,
+						a: 1.0,
+					},
+					}],
+				depth_stencil_attachment: Some( wgpu::RenderPassDepthStencilAttachmentDescriptor {
+					attachment : &self.renderer.depth_buffer.1,
+					depth_load_op : wgpu::LoadOp::Clear,
+					depth_store_op : wgpu::StoreOp::Store,
+					clear_depth : 1.0,
+					stencil_load_op : wgpu::LoadOp::Clear,
+					stencil_store_op : wgpu::StoreOp::Store,
+					clear_stencil : 0,
+				}),
+			});
 
-				render_pass.set_pipeline(&self.renderer.pipeline);
+			render_pass.set_pipeline(&self.renderer.pipeline);
 
-				render_pass.set_bind_group(0, &self.renderer.uniform_bg, &[]);
-
-				render_pass.draw(0..0, 0..1);
-
-			}
-
-			for model in self.scene.objects.values() {
-
+			for model in self.scene.objects.values_mut().filter(|model| model.instances.len() != 0) {
+				
 				let instances = &model.instances;
-
-				let instance_buf = self.renderer.device.create_buffer_with_data(
-					render::to_char_slice(instances.as_slice()),
-					wgpu::BufferUsage::COPY_SRC
+				
+				let instance_slice = render::to_char_slice(instances.as_slice());
+				
+				let instance_buff = self.renderer.device.create_buffer_with_data(
+					instance_slice,
+					wgpu::BufferUsage::UNIFORM | wgpu::BufferUsage::STORAGE_READ,
 				);
-
-				encoder.copy_buffer_to_buffer(
-					&instance_buf,
-					0 as wgpu::BufferAddress,
-					&self.renderer.instance_buf,
-					0 as wgpu::BufferAddress,
-					render::Renderer::INSTANCE_SIZE,
-				);
-
-				let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-					color_attachments : &[wgpu::RenderPassColorAttachmentDescriptor {
-						attachment : &frame.view,
-						resolve_target : None,
-						load_op: wgpu::LoadOp::Load,
-						store_op: wgpu::StoreOp::Store,
-						clear_color: wgpu::Color {
-							r: 0.0,
-							g: 0.8,
-							b: 1.0,
-							a: 1.0,
-						},
-						}],
-					depth_stencil_attachment: Some( wgpu::RenderPassDepthStencilAttachmentDescriptor {
-						attachment : &self.renderer.depth_buffer.1,
-						depth_load_op : wgpu::LoadOp::Load,
-						depth_store_op : wgpu::StoreOp::Store,
-						clear_depth : 1.0,
-						stencil_load_op : wgpu::LoadOp::Clear,
-						stencil_store_op : wgpu::StoreOp::Store,
-						clear_stencil : 0,
-					}),
-				});
-
-				render_pass.set_pipeline(&self.renderer.pipeline);
+				
+				model.bind_group = Some(self.renderer.device.create_bind_group(&wgpu::BindGroupDescriptor{
+					layout : &self.renderer.instance_bgl,
+					bindings : &[
+						wgpu::Binding {
+							binding : 0,
+							resource : wgpu::BindingResource::Buffer {
+								buffer : &instance_buff,
+								range : 0..instance_slice.len() as wgpu::BufferAddress,
+							},
+						}
+				],
+					label : None,
+				}));
+									
+				let mesh = &model.mesh;
+				
+				let instances = &model.instances;	
 				
 				render_pass.set_bind_group(0, &self.renderer.uniform_bg, &[]);
-
-				let mesh = &model.mesh;
-
+				
+				render_pass.set_bind_group(1, model.bind_group.as_ref().unwrap(), &[]);
+				
 				render_pass.set_vertex_buffer(0, &mesh.0, 0, 0);
-
+				
 				render_pass.set_index_buffer(&mesh.1, 0, 0);
-
+				
 				render_pass.draw_indexed(0..mesh.3, 0, 0..instances.len() as u32);
-
-				drop(render_pass);
+				
 			}
-		
+
+			drop(render_pass);
+
 			self.renderer.queue.submit(&[encoder.finish()]);
 			
 		} else  { panic!("type mismatch!"); }
