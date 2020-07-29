@@ -14,16 +14,16 @@ pub struct Renderer {
 	pub instance_bgl : wgpu::BindGroupLayout,
 
 	pub depth_buffer : (wgpu::Texture, wgpu::TextureView)
-	
+
 
 }
 
 impl Renderer {
 
 	pub async fn new<T>(win : &winit::window::Window, vertex_descs : &[wgpu::VertexBufferDescriptor<'_>], vertex_uniform : &[T]) -> Self{
-		
+
 		let win_size = win.inner_size();
-		
+
 		let surface = wgpu::Surface::create(win);
 
 		let adapter = wgpu::Adapter::request(
@@ -33,7 +33,7 @@ impl Renderer {
 			},
 			wgpu::BackendBit::PRIMARY,
 		).await.unwrap();
-		
+
 		let (device, queue) = adapter.request_device(
 			&wgpu::DeviceDescriptor {
 				extensions: wgpu::Extensions {
@@ -42,19 +42,19 @@ impl Renderer {
 				limits : Default::default(),
 			}
 		).await;
-		
+
 		let sc_desc = wgpu::SwapChainDescriptor {
-			
+
 			usage        : wgpu::TextureUsage::OUTPUT_ATTACHMENT,
 			format       : wgpu::TextureFormat::Bgra8UnormSrgb,
 			width        : win_size.width,
 			height       : win_size.height,
 			present_mode : wgpu::PresentMode::Mailbox,
-			
+
 		};
-		
+
 		let swap = device.create_swap_chain(&surface, &sc_desc);
-		
+
 		let uniform_buf = device.create_buffer_with_data(
 			to_char_slice(vertex_uniform),
 			wgpu::BufferUsage::UNIFORM | wgpu::BufferUsage::COPY_DST,
@@ -72,7 +72,7 @@ impl Renderer {
 			],
 			label: Some("uniform_layout"),
 		});
-		
+
 		let uniform_bg = device.create_bind_group(&wgpu::BindGroupDescriptor {
 			layout: &uniforms_layout,
 			bindings : &[
@@ -86,7 +86,7 @@ impl Renderer {
 				],
 				label: Some("uniform_bg"),
 		});
-			
+
 		let instance_bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
 			bindings : &[
 				wgpu::BindGroupLayoutEntry {
@@ -100,18 +100,18 @@ impl Renderer {
 			],
 			label : Some("instances")
 		});
-			
+
 		let depth_buffer = Texture::create_depth_texture(&device, &sc_desc);
-		
+
 		let pipeline = {
-			
+
 			let vertshader = Renderer::shader_module(&device, std::path::Path::new("src/shaders/default.vert.spv"));
 			let fragshader = Renderer::shader_module(&device, std::path::Path::new("src/shaders/default.frag.spv"));
-			
+
 			let layout = &device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
 				bind_group_layouts: &[&uniforms_layout, &instance_bgl],
 			});
-			
+
 			device.create_render_pipeline(
 				&wgpu::RenderPipelineDescriptor {
 					layout,
@@ -136,12 +136,12 @@ impl Renderer {
 							color_blend: wgpu::BlendDescriptor {
 								src_factor: wgpu::BlendFactor::SrcAlpha,
 								dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
-								operation: wgpu::BlendOperation::Add,                 
+								operation: wgpu::BlendOperation::Add,
 							},
 							alpha_blend: wgpu::BlendDescriptor {
 								src_factor: wgpu::BlendFactor::One,
 								dst_factor: wgpu::BlendFactor::One,
-								operation: wgpu::BlendOperation::Add,                 
+								operation: wgpu::BlendOperation::Add,
 							},							write_mask : wgpu::ColorWrite::ALL,
 						}
 					],
@@ -162,12 +162,12 @@ impl Renderer {
 					sample_count : 1,
 					sample_mask: !0,
 					alpha_to_coverage_enabled: false,
-					
+
 				}
 			)
-			
+
 		};
-		
+
 		Self {
 			win_size,
 			surface,
@@ -182,9 +182,9 @@ impl Renderer {
 			depth_buffer,
 			instance_bgl,
 		}
-		
+
 	}
-	
+
 	pub fn resize(&mut self, size : winit::dpi::PhysicalSize<u32>) {
 		self.win_size = size;
 		self.sc_desc.width = size.width;
@@ -192,57 +192,57 @@ impl Renderer {
 		self.swap = self.device.create_swap_chain(&self.surface, &self.sc_desc);
 		self.depth_buffer = Texture::create_depth_texture(&self.device, &self.sc_desc);
 	}
-	
+
 	pub fn shader_module(device : &wgpu::Device, name : &std::path::Path) -> wgpu::ShaderModule {
-		
+
 		let mut spirv = std::fs::File::open(name).unwrap();
-		
+
 		let data = wgpu::read_spirv(&mut spirv).unwrap();
-		
+
 		device.create_shader_module(&data)
-		
+
 	}
-	
+
 	pub fn begin(&self) -> wgpu::CommandEncoder{
-		
+
 		self.device.create_command_encoder(
 			&wgpu::CommandEncoderDescriptor {
 				label: Some("draw"),
 			}
 		)
-		
+
 	}
-	
+
 }
 
 pub fn to_char_slice<T>(array : &[T]) -> &[u8] {
-	
+
 	let size = std::mem::size_of::<T>();
-	
+
 	let data_ptr = array.as_ptr() as *const u8;
-	
+
 	unsafe { std::slice::from_raw_parts(data_ptr, array.len() * size)}
-	
+
 }
 
 pub struct Texture {
 	pub texture: wgpu::Texture,
     pub view: wgpu::TextureView,
-    pub sampler: wgpu::Sampler,	
+    pub sampler: wgpu::Sampler,
 }
 
 impl Texture {
-	
+
 	const DEPTH_FORMAT : wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
-	
+
 	pub fn create_depth_texture(device : &wgpu::Device, sc_desc : &wgpu::SwapChainDescriptor) -> (wgpu::Texture, wgpu::TextureView) {
-		
+
 		let size = wgpu::Extent3d {
 			width  : sc_desc.width,
 			height : sc_desc.height,
 			depth  : 1,
 		};
-		
+
 		let desc = wgpu::TextureDescriptor {
 			label : Some("Depth"),
 			size,
@@ -255,10 +255,10 @@ impl Texture {
 			| wgpu::TextureUsage::SAMPLED
 			| wgpu::TextureUsage::COPY_SRC,
 		};
-		
+
 		let texture = device.create_texture(&desc);
 		let view = texture.create_default_view();
-		
+
 		(texture, view)
 
 	}

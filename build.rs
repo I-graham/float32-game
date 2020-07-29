@@ -5,6 +5,27 @@ fn main() -> std::io::Result<()> {
 	
 	let mut compiler = shaderc::Compiler::new().unwrap();
 	
+	let mut options = shaderc::CompileOptions::new().unwrap();
+
+	options.set_warnings_as_errors();
+
+	options.set_optimization_level(shaderc::OptimizationLevel::Performance);
+	
+	options.set_include_callback(|source_req, _, _, _| {
+		
+		let full_req = format!("src/shaders/{}", source_req);
+
+		let mut content = String::new();
+		
+		std::fs::File::open(std::path::Path::new(&full_req)).unwrap().read_to_string(&mut content).unwrap();
+
+		Ok(shaderc::ResolvedInclude {
+			resolved_name : full_req,
+			content,
+		})
+
+	});
+
 	for maybe_file in std::fs::read_dir("src/shaders").unwrap() {
 
 		let file = maybe_file.unwrap();
@@ -33,7 +54,7 @@ fn main() -> std::io::Result<()> {
 		
 		let source = std::fs::read_to_string(path)?;
 		
-		let spirv = compiler.compile_into_spirv(source.as_str(), kind, path.to_str().unwrap(), "main", None).map_err(|e| println!("{}", e)).expect("");
+		let spirv = compiler.compile_into_spirv(source.as_str(), kind, path.to_str().unwrap(), "main", Some(&options)).map_err(|e| println!("{}", e)).expect("");
 
 		new_shader.write(spirv.as_binary_u8()).unwrap();
 
