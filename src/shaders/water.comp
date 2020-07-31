@@ -1,0 +1,55 @@
+#version 450
+
+#include "noise.glsl"
+
+const int SCALE = 5;
+
+layout(set=0, binding=0)
+buffer Vertices {
+	float vertices[];
+};
+
+layout(set=1, binding=0)
+uniform Uniforms {
+	int time;
+	vec3 cam_pos;
+	mat4 cam_proj;
+	vec3 light_pos;
+	vec3 light_col;
+};
+
+
+uint to_coord(uint x, uint y) {
+	return (x * 40 + y) * 9;
+}
+
+void vert(uint start, vec3 p, vec3 c, vec3 n) {
+	vertices[start + 0] = p.x;
+	vertices[start + 1] = p.y;
+	vertices[start + 2] = p.z;
+
+	vertices[start + 3] = c.x;
+	vertices[start + 4] = c.y;
+	vertices[start + 5] = c.z;
+
+	vertices[start + 6] = n.x;
+	vertices[start + 7] = n.y;
+	vertices[start + 8] = n.z;
+}
+
+void main() {
+	uint this_coord = to_coord(gl_GlobalInvocationID.x, gl_GlobalInvocationID.y);
+
+	vec3 pos = vec3(gl_GlobalInvocationID.x, gl_GlobalInvocationID.y, 0.0) / vec3(gl_WorkGroupSize * gl_NumWorkGroups);
+	vec3 col = vec3(0.6,0.6,1.0);
+	vec3 norm = vec3(0.0,0.0,0.5);
+
+	pos.z = abs(perlin_noise(SCALE * pos.x, SCALE * pos.y, float(time) / 60.0) / SCALE);
+
+	vert(
+		this_coord,
+		pos,
+		col,
+		norm
+	);
+}

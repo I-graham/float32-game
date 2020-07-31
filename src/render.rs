@@ -10,6 +10,7 @@ pub struct Renderer {
 	pub swap         : wgpu::SwapChain,
 	pub pipeline     : wgpu::RenderPipeline,
 	pub uniform_bg   : wgpu::BindGroup,
+	pub uniform_bgl  : wgpu::BindGroupLayout,
 	pub uniform_buf  : wgpu::Buffer,
 	pub instance_bgl : wgpu::BindGroupLayout,
 
@@ -64,7 +65,7 @@ impl Renderer {
 			bindings: &[
 				wgpu::BindGroupLayoutEntry {
 					binding : 0,
-					visibility : wgpu::ShaderStage::VERTEX | wgpu::ShaderStage::FRAGMENT,
+					visibility : wgpu::ShaderStage::VERTEX | wgpu::ShaderStage::FRAGMENT | wgpu::ShaderStage::COMPUTE,
 					ty: wgpu::BindingType::UniformBuffer {
 						dynamic : false,
 					},
@@ -178,6 +179,7 @@ impl Renderer {
 			swap,
 			pipeline,
 			uniform_bg,
+			uniform_bgl : uniforms_layout,
 			uniform_buf,
 			depth_buffer,
 			instance_bgl,
