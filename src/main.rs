@@ -3,6 +3,8 @@ use winit::event::Event;
 
 use std::collections::HashMap;
 
+use cgmath::Rotation3;
+
 mod render;
 use render::*;
 
@@ -131,7 +133,7 @@ impl Default for Uniform {
 			time : 0,
 			cam_position : [0.0,0.0,0.0],
 			cam_proj : cgmath::Matrix4::identity(),
-			light_position : [0.5, 0.5, -1.0],
+			light_position : [0.5, 0.5, -10.0],
 			light_color : [1.0, 1.0, 1.0],
 			__align0 : [0; 3],
 			__align1 : [0; 1],
@@ -507,8 +509,6 @@ impl GameState {
 
 		self.uniforms.time += 1;
 
-		self.generate_water();
-
 		const SPEED : f32 = 0.05;
 
 		self.camera.eye += cgmath::Vector3::new(
@@ -521,9 +521,12 @@ impl GameState {
 
 		//self.camera.target = self.camera.eye - cgmath::Vector3::unit_z();
 
+		self.uniforms.cam_position = self.camera.eye.into();
+
 		self.uniforms.cam_proj = self.camera.build_view_projection_matrix();
 
 		self.upload_uniform();
+		self.generate_water();
 
 	}
 
@@ -729,7 +732,6 @@ async fn entry(event_loop : winit::event_loop::EventLoop<()>, window : winit::wi
 
 			};
 
-			use cgmath::Rotation3;
 			scene.objects.insert("water", Model {
 				mesh,
 				instances : vec![Instance {
@@ -757,13 +759,12 @@ async fn entry(event_loop : winit::event_loop::EventLoop<()>, window : winit::wi
 		}
 	};
 
-/*	use cgmath::prelude::Rotation3;
 	state.boats.push( Boat {
 		position : Instance {
 			position : [0.0, 0.0, -1.0].into(),
 			rotation : cgmath::Quaternion::from_axis_angle(cgmath::Vector3::unit_y(), cgmath::Deg(0.0)),
 		}
-	});*/
+	});
 
 	let mut fps = 0;
 	let mut fps_timer = std::time::Instant::now();

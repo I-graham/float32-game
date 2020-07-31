@@ -59,7 +59,8 @@ float K(int a, vec3 uvw, vec3 ijk)
 
 float perlin_noise(float x, float y, float z)
 {
-	float s = (x + y + z) / 3.0;  
+	return sqrt((x-2.5)*(x-2.5)+(y-2.5)*(y-2.5));
+	float s = (x + y + z) / 3.0;
 	vec3 ijk = vec3(int(floor(x+s)), int(floor(y+s)), int(floor(z+s)));
 	s = float(ijk.x + ijk.y + ijk.z) / 6.0;
 	vec3 uvw = vec3(x - float(ijk.x) + s, y - float(ijk.y) + s, z - float(ijk.z) + s);
@@ -70,6 +71,6 @@ float perlin_noise(float x, float y, float z)
 }
 
 float gold_noise(in vec2 xy, in float seed){
-	const float PHI = 1.61803398874989484820459;  // Φ = Golden Ratio   
+	const float PHI = 1.61803398874989484820459;  // Φ = Golden Ratio
 	return fract(tan(distance(xy*PHI, xy)*seed)*xy.x);
 }
