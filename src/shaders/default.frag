@@ -15,13 +15,17 @@ uniform Uniforms {
 	vec3 light_col;
 };
 
-void main() {
+vec3 ambient_lerp(vec3 normal) {
+	return vec3(0.5, 0.8, 1.0)*(normal.y)+vec3(0.0, 0.3, 0.4)*(1.0-normal.y);
+}
 
-	float ambient_strength = 0.15;
-	vec3 ambient_color = light_col * ambient_strength;
+void main() {
 
 	vec3 normal = normalize(m_norm);
 	vec3 light_dir = normalize(light_pos - m_coord);
+
+	float ambient_strength = 0.1;
+	vec3 ambient_color = ambient_lerp(normal) * ambient_strength;
 
 	float diffuse_strength = max(dot(normal, light_dir), 0.0);
 	vec3 diffuse_color = light_col * diffuse_strength;

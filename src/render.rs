@@ -1,6 +1,7 @@
 pub struct Renderer {
 
 	pub win_size     : winit::dpi::PhysicalSize<u32>,
+	pub sample_count : u32,
 
 	pub surface      : wgpu::Surface,
 	pub adapter      : wgpu::Adapter,
@@ -14,14 +15,16 @@ pub struct Renderer {
 	pub uniform_buf  : wgpu::Buffer,
 	pub instance_bgl : wgpu::BindGroupLayout,
 
-	pub depth_buffer : (wgpu::Texture, wgpu::TextureView)
-
+	pub depth_buffer : (wgpu::Texture, wgpu::TextureView),
+	pub msaa_texture : (wgpu::Texture, wgpu::TextureView),
 
 }
 
 impl Renderer {
 
-	pub async fn new<T>(win : &winit::window::Window, vertex_descs : &[wgpu::VertexBufferDescriptor<'_>], vertex_uniform : &[T]) -> Self{
+	const DEPTH_FORMAT : wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
+
+	pub async fn new<T>(win : &winit::window::Window, vertex_descs : &[wgpu::VertexBufferDescriptor<'_>], vertex_uniform : &[T], sample_count : u32) -> Self{
 
 		let win_size = win.inner_size();
 
@@ -29,7 +32,7 @@ impl Renderer {
 
 		let adapter = wgpu::Adapter::request(
 			&wgpu::RequestAdapterOptions {
-				power_preference : wgpu::PowerPreference::HighPerformance,
+				power_preference : wgpu::PowerPreference::LowPower,
 				compatible_surface : Some(&surface),
 			},
 			wgpu::BackendBit::PRIMARY,
@@ -102,7 +105,7 @@ impl Renderer {
 			label : Some("instances")
 		});
 
-		let depth_buffer = Texture::create_depth_texture(&device, &sc_desc);
+		let depth_buffer = Self::create_depth_texture(&device, &sc_desc, sample_count);
 
 		let pipeline = {
 
@@ -148,7 +151,7 @@ impl Renderer {
 					],
 					primitive_topology : wgpu::PrimitiveTopology::TriangleList,
 					depth_stencil_state : Some( wgpu::DepthStencilStateDescriptor {
-						format : Texture::DEPTH_FORMAT,
+						format : Self::DEPTH_FORMAT,
 						depth_write_enabled : true,
 						depth_compare : wgpu::CompareFunction::LessEqual,
 						stencil_front : wgpu::StencilStateFaceDescriptor::IGNORE,
@@ -160,7 +163,7 @@ impl Renderer {
 						index_format: wgpu::IndexFormat::Uint32,
 						vertex_buffers: vertex_descs,
 					},
-					sample_count : 1,
+					sample_count : sample_count,
 					sample_mask: !0,
 					alpha_to_coverage_enabled: false,
 
@@ -169,8 +172,11 @@ impl Renderer {
 
 		};
 
+		let msaa_texture = Self::create_multisampled_framebuffer(&device, &sc_desc, sample_count);
+
 		Self {
 			win_size,
+			sample_count,
 			surface,
 			adapter,
 			device,
@@ -183,6 +189,7 @@ impl Renderer {
 			uniform_buf,
 			depth_buffer,
 			instance_bgl,
+			msaa_texture
 		}
 
 	}
@@ -192,7 +199,8 @@ impl Renderer {
 		self.sc_desc.width = size.width;
 		self.sc_desc.height = size.height;
 		self.swap = self.device.create_swap_chain(&self.surface, &self.sc_desc);
-		self.depth_buffer = Texture::create_depth_texture(&self.device, &self.sc_desc);
+		self.depth_buffer = Self::create_depth_texture(&self.device, &self.sc_desc, self.sample_count);
+		self.msaa_texture = Self::create_multisampled_framebuffer(&self.device, &self.sc_desc, self.sample_count);
 	}
 
 	pub fn shader_module(device : &wgpu::Device, name : &std::path::Path) -> wgpu::ShaderModule {
@@ -215,29 +223,7 @@ impl Renderer {
 
 	}
 
-}
-
-pub fn to_char_slice<T>(array : &[T]) -> &[u8] {
-
-	let size = std::mem::size_of::<T>();
-
-	let data_ptr = array.as_ptr() as *const u8;
-
-	unsafe { std::slice::from_raw_parts(data_ptr, array.len() * size)}
-
-}
-
-pub struct Texture {
-	pub texture: wgpu::Texture,
-    pub view: wgpu::TextureView,
-    pub sampler: wgpu::Sampler,
-}
-
-impl Texture {
-
-	const DEPTH_FORMAT : wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
-
-	pub fn create_depth_texture(device : &wgpu::Device, sc_desc : &wgpu::SwapChainDescriptor) -> (wgpu::Texture, wgpu::TextureView) {
+	pub fn create_depth_texture(device : &wgpu::Device, sc_desc : &wgpu::SwapChainDescriptor, sample_count: u32) -> (wgpu::Texture, wgpu::TextureView) {
 
 		let size = wgpu::Extent3d {
 			width  : sc_desc.width,
@@ -250,7 +236,7 @@ impl Texture {
 			size,
 			array_layer_count : 1,
 			mip_level_count : 1,
-			sample_count : 1,
+			sample_count : sample_count,
 			dimension : wgpu::TextureDimension::D2,
 			format : Self::DEPTH_FORMAT,
 			usage: wgpu::TextureUsage::OUTPUT_ATTACHMENT
@@ -264,4 +250,39 @@ impl Texture {
 		(texture, view)
 
 	}
+
+	fn create_multisampled_framebuffer(device: &wgpu::Device, sc_desc: &wgpu::SwapChainDescriptor, sample_count: u32) -> (wgpu::Texture, wgpu::TextureView) {
+		let multisampled_texture_extent = wgpu::Extent3d {
+			width: sc_desc.width,
+			height: sc_desc.height,
+			depth: 1,
+		};
+		let multisampled_frame_descriptor = &wgpu::TextureDescriptor {
+			size: multisampled_texture_extent,
+			array_layer_count: 1,
+			mip_level_count: 1,
+			sample_count: sample_count,
+			dimension: wgpu::TextureDimension::D2,
+			format: sc_desc.format,
+			usage: wgpu::TextureUsage::OUTPUT_ATTACHMENT,
+			label: None,
+		};
+
+		let texture = device.create_texture(multisampled_frame_descriptor);
+
+		let view = texture.create_default_view();
+
+		(texture, view)
+	}
+
+}
+
+pub fn to_char_slice<T>(array : &[T]) -> &[u8] {
+
+	let size = std::mem::size_of::<T>();
+
+	let data_ptr = array.as_ptr() as *const u8;
+
+	unsafe { std::slice::from_raw_parts(data_ptr, array.len() * size)}
+
 }

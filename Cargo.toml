@@ -5,7 +5,7 @@ authors = ["ian.graham28@gmail.com"]
 edition = "2018"
 
 [dependencies]
-wgpu = "0.5.2"
+wgpu = { version = "0.5.2", features=["vulkan"]}
 futures = "0.3"
 winit = { version = "0.22", features = ["web-sys"] }
 cgmath = "0.17"

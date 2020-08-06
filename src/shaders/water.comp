@@ -16,10 +16,11 @@ uniform Uniforms {
 	vec3 light_col;
 };
 
-const int SCALE = 5;
+const float SCALE      = 7.0;
+const float HEIGHT_LIM = 0.25;
 
 uvec3 workItems = gl_WorkGroupSize * gl_NumWorkGroups;
-float perlin_z = float(time) / 120;
+float perlin_z = float(time) / 100;
 
 uint to_coord(uint x, uint y) {
 	return (x * workItems.x + y) * 9;
@@ -39,23 +40,44 @@ void vert(uint start, vec3 p, vec3 c, vec3 n) {
 	vertices[start + 8] = n.z;
 }
 
+float getHeight(vec2 pos) {
+	return HEIGHT_LIM * noise(vec3(SCALE * pos.x, SCALE * pos.y, perlin_z)) / SCALE;
+}
+
 vec3 norm(vec3 pos) {
 	const float unit = 0.01;
 
-	vec3 tangent   = vec3(SCALE * pos.xy, perlin_noise(pos.x + unit, pos.y, perlin_z) - pos);
-	vec3 bitangent = vec3(SCALE * pos.xy, perlin_noise(pos.x, pos.y + unit, perlin_z) - pos);
+	vec2 coords1 = vec2(pos.x + unit, pos.y);
+	vec2 coords2 = vec2(pos.x, pos.y + unit);
 
-	return normalize(cross(tangent, bitangent));
+	vec3 point1 = vec3(coords1, getHeight(coords1));
+	vec3 point2 = vec3(coords2, getHeight(coords2));
+
+	vec3 tangent   = point1 - pos;
+	vec3 bitangent = point2 - pos;
+
+	vec3 raw_norm = cross(tangent, bitangent);
+
+	return raw_norm;
+
+}
+
+void final_transform(inout vec3 pos) {
+	pos -= vec3(.5, .5, 0);
 }
 
 void main() {
 	uint this_coord = to_coord(gl_GlobalInvocationID.x, gl_GlobalInvocationID.y);
 
-	vec3 pos = vec3(gl_GlobalInvocationID.x, gl_GlobalInvocationID.y, 0.0) / vec3(workItems);
+	vec2 corner = (inverse(cam_proj) * vec4(1,1,0,1)).xy;
 
-	pos.z = perlin_noise(SCALE * pos.x, SCALE * pos.y, perlin_z) / SCALE;
-	vec3 col = vec3(1.0);
+	vec3 pos = cam_pos + vec3(gl_GlobalInvocationID.xy, 0.0) / vec3(workItems);
+	pos.z = getHeight(pos.xy);
+
 	vec3 normal = norm(pos);
+	vec3 col = vec3(0.1, 0.45, 0.40);
+
+	final_transform(pos);
 
 	vert(
 		this_coord,

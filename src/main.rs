@@ -99,20 +99,38 @@ impl Scene {
 			objects : HashMap::new(),
 		};
 
-		let (verts, indices) = Vertex::load_mesh("data/floater.obj", [0.8,0.8,0.8], 0.5);
+		{
+			let (verts, indices) = Vertex::load_mesh("data/floater.obj", [0.8,0.8,0.8], 0.05);
 
-		let vertices : &[Vertex] = verts.as_slice();
+			let vertices : &[Vertex] = verts.as_slice();
 
-		let indices : &[u32] = indices.as_slice();
+			let indices : &[u32] = indices.as_slice();
 
-		scene.objects.insert("boat", Model::new(device, vertices, indices));
+			scene.objects.insert("boat", Model::new(device, vertices, indices));
+		}
+		{
+			let (verts, indices) = Vertex::load_mesh("data/sun.obj", [1.0,1.0,1.0], 0.05);
+
+			let vertices : &[Vertex] = verts.as_slice();
+
+			let indices : &[u32] = indices.as_slice();
+
+			scene.objects.insert("sun", Model::new(device, vertices, indices));
+
+			let model : &mut Model = scene.objects.get_mut("sun").unwrap();
+
+			model.instances.push(Instance {
+				position : [0.5; 3].into(),
+				rotation : cgmath::Quaternion::from_axis_angle(cgmath::Vector3::unit_y(), cgmath::Deg(0.0)),
+			}.to_matrix());
+		}
 
 		scene
 	}
 
 }
 
-#[repr(C, align(16))]
+#[repr(C, packed)]
 #[derive(Copy, Clone, Debug)]
 struct Uniform {
 	time : i32,
@@ -133,8 +151,8 @@ impl Default for Uniform {
 			time : 0,
 			cam_position : [0.0,0.0,0.0],
 			cam_proj : cgmath::Matrix4::identity(),
-			light_position : [0.5, 0.5, -10.0],
-			light_color : [1.0, 1.0, 1.0],
+			light_position : [0.0, 7.0, 10.0],
+			light_color : [0.8, 0.8, 0.8],
 			__align0 : [0; 3],
 			__align1 : [0; 1],
 			__align2 : [0; 1],
@@ -171,7 +189,7 @@ impl WinState {
 	}
 }
 
-#[repr(C)]
+#[repr(C, packed)]
 #[derive(Copy, Clone, Debug)]
 struct Vertex {
 	position : [f32; 3],
@@ -248,7 +266,7 @@ struct GameState {
 
 impl GameState {
 
-	const WATER_RES : usize = 40;
+	const WATER_RES : usize = 80;
 
 	fn generate_water(&mut self) {
 		let mut encoder = self.renderer.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -299,8 +317,8 @@ impl GameState {
 
 			let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
 				color_attachments : &[wgpu::RenderPassColorAttachmentDescriptor {
-					attachment : &frame.view,
-					resolve_target : None,
+					attachment : &self.renderer.msaa_texture.1,
+					resolve_target : Some(&frame.view),
 					load_op: wgpu::LoadOp::Clear,
 					store_op: wgpu::StoreOp::Store,
 					clear_color: wgpu::Color {
@@ -373,7 +391,7 @@ impl GameState {
 			let mut brush = GlyphBrushBuilder::using_font(font).build(&self.renderer.device, self.renderer.sc_desc.format);
 
 			let section = Section {
-				screen_position: (self.win_state.win_size.width as f32 / 2.0f32, 1.8 * self.win_state.win_size.height as f32 / 2.0f32),
+				screen_position: (self.win_state.win_size.width as f32 / 2.0f32, 0.9 * self.win_state.win_size.height as f32),
 				text : vec![Text::new("Press space to begin").with_scale(70.0).with_color([0.0,0.0,0.0,1.0])],
 				layout : Layout::default_single_line().h_align(HorizontalAlign::Center),
 				..Section::default()
@@ -410,6 +428,8 @@ impl GameState {
 
 				boat_model.instances.extend(self.boats.iter().map(|boat| boat.position.to_matrix()));
 
+				println!("{}", boat_model.instances.len());
+
 			}
 
 			let frame = self.renderer.swap.get_next_texture().unwrap();
@@ -418,8 +438,8 @@ impl GameState {
 
 			let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
 				color_attachments : &[wgpu::RenderPassColorAttachmentDescriptor {
-					attachment : &frame.view,
-					resolve_target : None,
+					attachment : &self.renderer.msaa_texture.1,
+					resolve_target : Some(&frame.view),
 					load_op: wgpu::LoadOp::Clear,
 					store_op: wgpu::StoreOp::Store,
 					clear_color: wgpu::Color {
@@ -501,6 +521,11 @@ impl GameState {
 	fn update_menu(&mut self) {
 
 		self.uniforms.time += 1;
+
+		self.uniforms.cam_position = self.camera.eye.into();
+
+		self.uniforms.cam_proj = self.camera.build_view_projection_matrix();
+
 		self.upload_uniform();
 
 	}
@@ -508,6 +533,7 @@ impl GameState {
 	fn update_game(&mut self) {
 
 		self.uniforms.time += 1;
+
 
 		const SPEED : f32 = 0.05;
 
@@ -517,9 +543,7 @@ impl GameState {
 			(self.win_state.ctrl_down as i8 - self.win_state.shft_down as i8) as f32,
 		) * SPEED;
 
-		//self.update_water();
-
-		//self.camera.target = self.camera.eye - cgmath::Vector3::unit_z();
+		self.camera.target = self.camera.eye - cgmath::Vector3::unit_z();
 
 		self.uniforms.cam_position = self.camera.eye.into();
 
@@ -621,9 +645,20 @@ impl GameState {
 
 		};
 	}
+
+	fn resize(&mut self, dims : winit::dpi::PhysicalSize<u32>) {
+
+		self.renderer.resize(dims);
+		self.win_state.win_size = dims;
+		self.camera.aspect = dims.width as f32 / dims.height as f32;
+
+	}
+
 }
 
 async fn entry(event_loop : winit::event_loop::EventLoop<()>, window : winit::window::Window) {
+
+	let sample_count = 2;
 
 	let camera = Camera {
 		eye    : (0.0, 0.0, 1.0).into(),
@@ -642,7 +677,7 @@ async fn entry(event_loop : winit::event_loop::EventLoop<()>, window : winit::wi
 		..Default::default()
 	};
 
-	let renderer = Renderer::new(&window, &[VERTEX_DESC], &[uniforms]).await;
+	let renderer = Renderer::new(&window, &[VERTEX_DESC], &[uniforms], sample_count).await;
 
 	let mut state = {
 
@@ -732,18 +767,18 @@ async fn entry(event_loop : winit::event_loop::EventLoop<()>, window : winit::wi
 
 			};
 
+			use cgmath::prelude::SquareMatrix;
 			scene.objects.insert("water", Model {
 				mesh,
-				instances : vec![Instance {
-					position : [0.0,0.0,0.0].into(),
-					rotation : cgmath::Quaternion::from_axis_angle(cgmath::Vector3::unit_y(), cgmath::Deg(0.0)),
-				}.to_matrix()],
+				instances : vec![cgmath::Matrix4::identity()],
 				bind_group : None,
 			});
 
 			(pipeline, bind_group)
 
 		};
+
+
 
 		let boats = vec![];
 
@@ -761,8 +796,8 @@ async fn entry(event_loop : winit::event_loop::EventLoop<()>, window : winit::wi
 
 	state.boats.push( Boat {
 		position : Instance {
-			position : [0.0, 0.0, -1.0].into(),
-			rotation : cgmath::Quaternion::from_axis_angle(cgmath::Vector3::unit_y(), cgmath::Deg(0.0)),
+			position : [0.0, 0.0, 0.03].into(),
+			rotation : cgmath::Quaternion::from_axis_angle(cgmath::Vector3::unit_x(), cgmath::Deg(90.0)),
 		}
 	});
 
@@ -781,13 +816,9 @@ async fn entry(event_loop : winit::event_loop::EventLoop<()>, window : winit::wi
 
 					event::WindowEvent::CloseRequested => *control_flow = winit::event_loop::ControlFlow::Exit,
 
-					event::WindowEvent::ScaleFactorChanged { new_inner_size : dims, .. } => state.renderer.resize(**dims),
+					event::WindowEvent::ScaleFactorChanged { new_inner_size : dims, .. } => state.resize(**dims),
 
-					event::WindowEvent::Resized(dims) => {
-
-						state.renderer.resize(*dims);
-						state.win_state.win_size = *dims;
-					},
+					event::WindowEvent::Resized(dims) => state.resize(*dims),
 
 					event::WindowEvent::KeyboardInput { input : event::KeyboardInput {
 						virtual_keycode : Some(key),
