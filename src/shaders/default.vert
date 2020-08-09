@@ -15,6 +15,7 @@ uniform Uniforms {
 	mat4 cam_proj;
 	vec3 light_pos;
 	vec3 light_col;
+	vec2 win_size;
 };
 
 layout(set=1, binding=0)

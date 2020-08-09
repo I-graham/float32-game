@@ -13,6 +13,7 @@ uniform Uniforms {
 	mat4 cam_proj;
 	vec3 light_pos;
 	vec3 light_col;
+	vec2 win_size;
 };
 
 vec3 ambient_lerp(vec3 normal) {

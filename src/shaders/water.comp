@@ -7,6 +7,13 @@ buffer Vertices {
 	float vertices[];
 };
 
+layout(set=0, binding=1)
+buffer Waves {
+	int wave_len;
+	vec4 waves[];
+};
+
+
 layout(set=1, binding=0)
 uniform Uniforms {
 	int time;
@@ -14,13 +21,20 @@ uniform Uniforms {
 	mat4 cam_proj;
 	vec3 light_pos;
 	vec3 light_col;
+	uvec2 win_size;
 };
 
-const float SCALE      = 7.0;
-const float HEIGHT_LIM = 0.25;
+const float SCALE      = 0.7;
+const float HEIGHT_LIM = 0.5;
+
+const float M_PI = 3.1415926535897932384626433832795;
 
 uvec3 workItems = gl_WorkGroupSize * gl_NumWorkGroups;
-float perlin_z = float(time) / 100;
+float noise_time = float(time) / 100;
+
+float aspect = float(win_size.x) / win_size.y;
+float sink_height = 0.5;
+float modifier_size = abs(cam_pos.z + sink_height + HEIGHT_LIM);
 
 uint to_coord(uint x, uint y) {
 	return (x * workItems.x + y) * 9;
@@ -40,15 +54,20 @@ void vert(uint start, vec3 p, vec3 c, vec3 n) {
 	vertices[start + 8] = n.z;
 }
 
+float noise_sample_method(vec2 pos) {
+	return HEIGHT_LIM * noise(vec3(SCALE * pos.x, SCALE * pos.y, noise_time));
+}
+
+
 float getHeight(vec2 pos) {
-	return HEIGHT_LIM * noise(vec3(SCALE * pos.x, SCALE * pos.y, perlin_z)) / SCALE;
+	return noise_sample_method(pos);
 }
 
 vec3 norm(vec3 pos) {
-	const float unit = 0.01;
+	vec2 unit = vec2(1.0) / workItems.xy;
 
-	vec2 coords1 = vec2(pos.x + unit, pos.y);
-	vec2 coords2 = vec2(pos.x, pos.y + unit);
+	vec2 coords1 = vec2(pos.x + unit.x, pos.y);
+	vec2 coords2 = vec2(pos.x, pos.y + unit.y);
 
 	vec3 point1 = vec3(coords1, getHeight(coords1));
 	vec3 point2 = vec3(coords2, getHeight(coords2));
@@ -62,25 +81,65 @@ vec3 norm(vec3 pos) {
 
 }
 
+void begin_transform(inout vec3 pos) {
+	pos -= vec3(modifier_size * aspect / 2, modifier_size / 2, 0.0);
+}
+
 void final_transform(inout vec3 pos) {
-	pos -= vec3(.5, .5, 0);
+	pos -= vec3(0,0, sink_height);
+}
+
+vec3 sin_wave(vec4 wave, inout vec3 pos, inout vec3 tangent, inout vec3 binormal) {
+
+	float steepness = wave.z;
+	float wavelength = wave.w;
+	float k = 2 * M_PI / wavelength;
+	float c = sqrt(9.8 / k);
+	vec2 d = normalize(wave.xy);
+	float f = k * (dot(d, pos.xy) - c * noise_time);
+	float a = steepness / k;
+
+	tangent += vec3(
+		-d.x * d.x * (steepness * sin(f)),
+		d.x * (steepness * cos(f)),
+		-d.x * d.y * (steepness * sin(f))
+	);
+	binormal += vec3(
+		-d.x * d.y * (steepness * sin(f)),
+		d.y * (steepness * cos(f)),
+		-d.y * d.y * (steepness * sin(f))
+	);
+
+	return vec3(
+		d.x * (a * cos(f)),
+		a * sin(f),
+		d.y * (a * cos(f))
+	);
+
+
+}
+
+void sum_of_sines_method(inout vec3 pos, inout vec3 tangent, inout vec3 binormal) {
+	vec3 gridpoint = pos;
+	for(int i = 0; i < wave_len; i++) {
+		pos += sin_wave(waves[i], gridpoint, tangent, binormal);
+	}
+	pos = vec3(gridpoint.xy, pos.z);
 }
 
 void main() {
-	uint this_coord = to_coord(gl_GlobalInvocationID.x, gl_GlobalInvocationID.y);
-
-	vec2 corner = (inverse(cam_proj) * vec4(1,1,0,1)).xy;
-
-	vec3 pos = cam_pos + vec3(gl_GlobalInvocationID.xy, 0.0) / vec3(workItems);
-	pos.z = getHeight(pos.xy);
-
-	vec3 normal = norm(pos);
-	vec3 col = vec3(0.1, 0.45, 0.40);
-
+	vec3 pos = /*cam_pos +*/ vec3(modifier_size * vec2(aspect, 1.0) * gl_GlobalInvocationID.xy, 0.0) / vec3(workItems);
+	begin_transform(pos);
+	vec3 tangent = vec3(1, 0, 0);
+	vec3 binormal = vec3(0, 0, 1);
+	sum_of_sines_method(pos, tangent, binormal);
 	final_transform(pos);
+	vec3 normal = cross(binormal, tangent);
+
+	vec3 col = vec3(0.1, 0.45, 0.50);
 
 	vert(
-		this_coord,
+		to_coord(gl_GlobalInvocationID.x, gl_GlobalInvocationID.y),
 		pos,
 		col,
 		normal

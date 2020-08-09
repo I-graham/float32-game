@@ -142,6 +142,8 @@ struct Uniform {
 	__align2 : [i32; 1],
 	light_color : [f32; 3],
 	__align3 : [i32; 1],
+	win_size : [u32; 2],
+	__align4 : [i32; 2],
 }
 
 impl Default for Uniform {
@@ -153,10 +155,12 @@ impl Default for Uniform {
 			cam_proj : cgmath::Matrix4::identity(),
 			light_position : [0.0, 7.0, 10.0],
 			light_color : [0.8, 0.8, 0.8],
+			win_size : [0; 2],
 			__align0 : [0; 3],
 			__align1 : [0; 1],
 			__align2 : [0; 1],
-			__align3 : [0; 1]
+			__align3 : [0; 1],
+			__align4 : [0; 2],
 		}
 	}
 }
@@ -266,7 +270,7 @@ struct GameState {
 
 impl GameState {
 
-	const WATER_RES : usize = 80;
+	const WATER_RES : usize = 250;
 
 	fn generate_water(&mut self) {
 		let mut encoder = self.renderer.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -428,8 +432,6 @@ impl GameState {
 
 				boat_model.instances.extend(self.boats.iter().map(|boat| boat.position.to_matrix()));
 
-				println!("{}", boat_model.instances.len());
-
 			}
 
 			let frame = self.renderer.swap.get_next_texture().unwrap();
@@ -520,20 +522,11 @@ impl GameState {
 
 	fn update_menu(&mut self) {
 
-		self.uniforms.time += 1;
-
-		self.uniforms.cam_position = self.camera.eye.into();
-
-		self.uniforms.cam_proj = self.camera.build_view_projection_matrix();
-
 		self.upload_uniform();
 
 	}
 
 	fn update_game(&mut self) {
-
-		self.uniforms.time += 1;
-
 
 		const SPEED : f32 = 0.05;
 
@@ -545,16 +538,19 @@ impl GameState {
 
 		self.camera.target = self.camera.eye - cgmath::Vector3::unit_z();
 
-		self.uniforms.cam_position = self.camera.eye.into();
-
-		self.uniforms.cam_proj = self.camera.build_view_projection_matrix();
-
 		self.upload_uniform();
 		self.generate_water();
 
 	}
 
-	fn upload_uniform(&self) {
+	fn upload_uniform(&mut self) {
+		{
+			self.uniforms.time += 1;
+			self.uniforms.cam_position = self.camera.eye.into();
+			self.uniforms.cam_proj = self.camera.build_view_projection_matrix();
+			self.uniforms.win_size = [self.win_state.win_size.width, self.win_state.win_size.height];
+		}
+
 		let mut encoder = self.renderer.begin();
 
 		let new_uniform = self.renderer.device.create_buffer_with_data(
@@ -693,7 +689,15 @@ async fn entry(event_loop : winit::event_loop::EventLoop<()>, window : winit::wi
 							dynamic : false,
 							readonly : false,
 						}
-					}
+					},
+					wgpu::BindGroupLayoutEntry {
+						binding : 1,
+						visibility : wgpu::ShaderStage::COMPUTE,
+						ty : wgpu::BindingType::StorageBuffer {
+							dynamic : false,
+							readonly : false,
+						}
+					},
 				]
 			});
 
@@ -709,6 +713,28 @@ async fn entry(event_loop : winit::event_loop::EventLoop<()>, window : winit::wi
 				usage : wgpu::BufferUsage::VERTEX | wgpu::BufferUsage::STORAGE,
 			});
 
+			let wave_num = 1;
+			let wave_size = 4;
+			let waves_len = wave_num * wave_size + 1;
+
+			let mut waves_vec : Vec<f32> = vec![];
+
+			use rand::distributions::{Distribution, Uniform};
+
+			let range = Uniform::from(0.0f32..1.0f32);
+			let mut rng = rand::thread_rng();
+
+			waves_vec.push(0.0f32);
+			waves_vec.extend([1.0, 1.0, 0.5, 1.5].iter());
+
+			let char_slice = render::to_char_slice(waves_vec.as_mut_slice());
+			char_slice[0..4].clone_from_slice(render::to_char_slice(&[wave_num as u32]));
+
+			let waves_buff = renderer.device.create_buffer_with_data(
+				char_slice,
+				wgpu::BufferUsage::STORAGE
+			);
+
 			let bind_group = renderer.device.create_bind_group(&wgpu::BindGroupDescriptor{
 				layout : &bg_layout,
 				bindings : &[
@@ -717,6 +743,13 @@ async fn entry(event_loop : winit::event_loop::EventLoop<()>, window : winit::wi
 						resource : wgpu::BindingResource::Buffer {
 							buffer : &water_buff,
 							range : 0..size as wgpu::BufferAddress,
+						}
+					},
+					wgpu::Binding {
+						binding : 1,
+						resource : wgpu::BindingResource::Buffer {
+							buffer : &waves_buff,
+							range : 0..(waves_len * std::mem::size_of::<f32>()) as wgpu::BufferAddress,
 						}
 					},
 				],
@@ -777,8 +810,6 @@ async fn entry(event_loop : winit::event_loop::EventLoop<()>, window : winit::wi
 			(pipeline, bind_group)
 
 		};
-
-
 
 		let boats = vec![];
 

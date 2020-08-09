@@ -277,12 +277,12 @@ impl Renderer {
 
 }
 
-pub fn to_char_slice<T>(array : &[T]) -> &[u8] {
+pub fn to_char_slice<T>(array : &[T]) -> &mut [u8] {
 
 	let size = std::mem::size_of::<T>();
 
-	let data_ptr = array.as_ptr() as *const u8;
+	let data_ptr = array.as_ptr() as *mut u8;
 
-	unsafe { std::slice::from_raw_parts(data_ptr, array.len() * size)}
+	unsafe { std::slice::from_raw_parts_mut(data_ptr, array.len() * size)}
 
 }
