@@ -24,16 +24,16 @@ uniform Uniforms {
 	uvec2 win_size;
 };
 
-const float SCALE      = 0.7;
-const float HEIGHT_LIM = 0.5;
+const float SCALE      = 6.0;
+const float HEIGHT_LIM = 0.3;
 
 const float M_PI = 3.1415926535897932384626433832795;
 
 uvec3 workItems = gl_WorkGroupSize * gl_NumWorkGroups;
-float noise_time = float(time) / 100;
+float noise_time = float(time) / 60;
 
 float aspect = float(win_size.x) / win_size.y;
-float sink_height = 0.5;
+float sink_height = 0.4;
 float modifier_size = abs(cam_pos.z + sink_height + HEIGHT_LIM);
 
 uint to_coord(uint x, uint y) {
@@ -58,21 +58,6 @@ float noise_sample_method(vec2 pos) {
 	return HEIGHT_LIM * noise(vec3(SCALE * pos.x, SCALE * pos.y, noise_time));
 }
 
-float sin_wave(vec2 pos, vec4 wave) {
-	return HEIGHT_LIM * pow(cos(dot(wave.xy, SCALE * pos) - wave.z * noise_time), wave.w + 1);
-}
-
-float sum_of_sines_method(vec2 pos) {
-
-	float ret = 0.0;
-
-	for(int i = 0; i < wave_len; i++) {
-		ret += sin_wave(pos, waves[i]) / wave_len;
-	}
-
-	return ret;
-
-}
 
 float getHeight(vec2 pos) {
 	return noise_sample_method(pos);
@@ -104,11 +89,63 @@ void final_transform(inout vec3 pos) {
 	pos -= vec3(0,0, sink_height);
 }
 
+const float wave_speed = 2.0;
+
+vec3 sin_wave_pos(vec4 wave, vec3 pos) {
+
+	vec2 dir = wave.xy;
+	float wavelength = wave.z;
+	float w = sqrt(5 * 2 * M_PI / wavelength);
+	float speed = wave_speed;
+	float steep = wave.w/(w * HEIGHT_LIM * wave_len);
+
+	float trig_param = dot(w * dir, pos.xy) + speed * noise_time;
+
+	vec3 p = vec3(
+		HEIGHT_LIM*steep*dir.x*cos(trig_param),
+		HEIGHT_LIM*steep*dir.y*cos(trig_param),
+		HEIGHT_LIM*sin(trig_param)
+	);
+
+	return p;
+}
+
+vec3 sin_wave_norm(vec4 wave, vec3 pos) {
+
+	vec2 dir = wave.xy;
+	float wavelength = wave.z;
+	float w = sqrt(5 * 2 * M_PI / wavelength);
+	float speed = wave_speed;
+	float steep = wave.w/(w * HEIGHT_LIM * wave_len);
+
+	float wa = w * HEIGHT_LIM;
+	float s = sin(w * dot(dir, pos.xy) + speed * noise_time);
+	float c = cos(w * dot(dir, pos.xy) + speed * noise_time);
+
+	return vec3(
+		-(dir.x * wa * c),
+		-(dir.y * wa * c),
+		-(steep * wa * s)
+	);
+
+}
+
+void sum_of_sines_method(inout vec3 pos, inout vec3 normal) {
+	vec3 gridpoint = vec3(SCALE * pos.xy, 0.0);
+	for(int i = 0; i < wave_len; i++) {
+		gridpoint += sin_wave_pos(waves[i], gridpoint);
+	}
+	for(int i = 0; i < wave_len; i++) {
+		normal += sin_wave_norm(waves[i], gridpoint);
+	}
+	pos = gridpoint / SCALE;
+}
+
 void main() {
 	vec3 pos = cam_pos + vec3(modifier_size * vec2(aspect, 1.0) * gl_GlobalInvocationID.xy, 0.0) / vec3(workItems);
 	begin_transform(pos);
-	pos.z = getHeight(pos.xy);
-	vec3 normal = norm(pos);
+	vec3 normal = vec3(0,0,1);
+	sum_of_sines_method(pos, normal);
 	final_transform(pos);
 
 	vec3 col = vec3(0.1, 0.45, 0.50);

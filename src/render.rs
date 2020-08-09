@@ -53,7 +53,7 @@ impl Renderer {
 			format       : wgpu::TextureFormat::Bgra8UnormSrgb,
 			width        : win_size.width,
 			height       : win_size.height,
-			present_mode : wgpu::PresentMode::Mailbox,
+			present_mode : wgpu::PresentMode::Immediate,
 
 		};
 
@@ -129,7 +129,7 @@ impl Renderer {
 					}),
 					rasterization_state: Some(wgpu::RasterizationStateDescriptor{
 						front_face : wgpu::FrontFace::default(),
-						cull_mode : wgpu::CullMode::None,
+						cull_mode : wgpu::CullMode::Back,
 						depth_bias : 0,
 						depth_bias_slope_scale : 0.0,
 						depth_bias_clamp : 1.0,

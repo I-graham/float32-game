@@ -270,7 +270,7 @@ struct GameState {
 
 impl GameState {
 
-	const WATER_RES : usize = 250;
+	const WATER_RES : usize = 200;
 
 	fn generate_water(&mut self) {
 		let mut encoder = self.renderer.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -713,19 +713,16 @@ async fn entry(event_loop : winit::event_loop::EventLoop<()>, window : winit::wi
 				usage : wgpu::BufferUsage::VERTEX | wgpu::BufferUsage::STORAGE,
 			});
 
-			let wave_num = 1;
-			let wave_size = 4;
-			let waves_len = wave_num * wave_size + 1;
-
 			let mut waves_vec : Vec<f32> = vec![];
 
-			use rand::distributions::{Distribution, Uniform};
+			waves_vec.extend([0.0; 4].iter());
+			waves_vec.extend([1.0, 1.0, 60.0, 0.25].iter());
+			waves_vec.extend([1.0, 0.6, 21.0, 0.25].iter());
+			waves_vec.extend([1.0, 1.3, 18.0, 0.25].iter());
 
-			let range = Uniform::from(0.0f32..1.0f32);
-			let mut rng = rand::thread_rng();
-
-			waves_vec.push(0.0f32);
-			waves_vec.extend([1.0, 1.0, 0.5, 1.5].iter());
+			let wave_size = 4;
+			let waves_len = waves_vec.len();
+			let wave_num = waves_len / wave_size - 1;
 
 			let char_slice = render::to_char_slice(waves_vec.as_mut_slice());
 			char_slice[0..4].clone_from_slice(render::to_char_slice(&[wave_num as u32]));
@@ -783,8 +780,8 @@ async fn entry(event_loop : winit::event_loop::EventLoop<()>, window : winit::wi
 					indices.push(to_coord(x, y+1));
 
 					indices.push(to_coord(x+1, y));
-					indices.push(to_coord(x, y+1));
 					indices.push(to_coord(x+1, y+1));
+					indices.push(to_coord(x, y+1));
 
 				}
 			}
