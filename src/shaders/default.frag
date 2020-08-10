@@ -1,7 +1,7 @@
 #version 450
 
-layout(location = 0) in vec3 f_color;
-layout(location = 1) in vec3 m_coord;
+layout(location = 0) in vec3 m_coord;
+layout(location = 1) in vec4 f_color;
 layout(location = 2) in vec3 m_norm;
 
 layout(location=0) out vec4 out_color;
@@ -41,5 +41,5 @@ void main() {
 
 	vec3 result = (ambient_color + diffuse_color + specular_color) * f_color.xyz;
 
-	out_color = vec4(result, 1.0);
+	out_color = vec4(result, f_color.w);
 }

@@ -1,11 +1,11 @@
 #version 450
 
 layout(location = 0) in vec3 position;
-layout(location = 1) in vec3 color;
+layout(location = 1) in vec4 color;
 layout(location = 2) in vec3 normal;
 
-layout(location = 0) out vec3 f_color;
-layout(location = 1) out vec3 m_coord;
+layout(location = 0) out vec3 m_coord;
+layout(location = 1) out vec4 f_color;
 layout(location = 2) out vec3 m_norm;
 
 layout(set=0, binding=0)

@@ -24,7 +24,7 @@ uniform Uniforms {
 	uvec2 win_size;
 };
 
-const float SCALE      = 6.0;
+const float SCALE      = 3.0;
 const float HEIGHT_LIM = 0.3;
 
 const float M_PI = 3.1415926535897932384626433832795;
@@ -37,10 +37,10 @@ float sink_height = 0.4;
 float modifier_size = abs(cam_pos.z + sink_height + HEIGHT_LIM);
 
 uint to_coord(uint x, uint y) {
-	return (x * workItems.x + y) * 9;
+	return (x * workItems.x + y) * 10;
 }
 
-void vert(uint start, vec3 p, vec3 c, vec3 n) {
+void vert(uint start, vec3 p, vec4 c, vec3 n) {
 	vertices[start + 0] = p.x;
 	vertices[start + 1] = p.y;
 	vertices[start + 2] = p.z;
@@ -48,10 +48,11 @@ void vert(uint start, vec3 p, vec3 c, vec3 n) {
 	vertices[start + 3] = c.x;
 	vertices[start + 4] = c.y;
 	vertices[start + 5] = c.z;
+	vertices[start + 6] = c.w;
 
-	vertices[start + 6] = n.x;
-	vertices[start + 7] = n.y;
-	vertices[start + 8] = n.z;
+	vertices[start + 7] = n.x;
+	vertices[start + 8] = n.y;
+	vertices[start + 9] = n.z;
 }
 
 float noise_sample_method(vec2 pos) {
@@ -89,7 +90,7 @@ void final_transform(inout vec3 pos) {
 	pos -= vec3(0,0, sink_height);
 }
 
-const float wave_speed = 2.0;
+const float wave_speed = 0.5;
 
 vec3 sin_wave_pos(vec4 wave, vec3 pos) {
 
@@ -148,7 +149,7 @@ void main() {
 	sum_of_sines_method(pos, normal);
 	final_transform(pos);
 
-	vec3 col = vec3(0.1, 0.45, 0.50);
+	vec4 col = vec4(0.1, 0.45, 0.50, 1.0);
 
 	vert(
 		to_coord(gl_GlobalInvocationID.x, gl_GlobalInvocationID.y),

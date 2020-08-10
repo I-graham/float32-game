@@ -100,7 +100,7 @@ impl Scene {
 		};
 
 		{
-			let (verts, indices) = Vertex::load_mesh("data/floater.obj", [0.8,0.8,0.8], 0.05);
+			let (verts, indices) = Vertex::load_mesh("data/floater.obj", [0.8,0.8,0.8, 1.0], 0.05);
 
 			let vertices : &[Vertex] = verts.as_slice();
 
@@ -108,8 +108,9 @@ impl Scene {
 
 			scene.objects.insert("boat", Model::new(device, vertices, indices));
 		}
+
 		{
-			let (verts, indices) = Vertex::load_mesh("data/sun.obj", [1.0,1.0,1.0], 0.05);
+			let (verts, indices) = Vertex::load_mesh("data/sun.obj", [1.0,1.0,1.0, 1.0], 0.05);
 
 			let vertices : &[Vertex] = verts.as_slice();
 
@@ -123,6 +124,38 @@ impl Scene {
 				position : [0.5; 3].into(),
 				rotation : cgmath::Quaternion::from_axis_angle(cgmath::Vector3::unit_y(), cgmath::Deg(0.0)),
 			}.to_matrix());
+		}
+
+		{
+			let vertices : &[Vertex] = &[
+				Vertex {
+					position : [0.0, 0.0, 0.0],
+					color : [0.0, 0.0, 0.0, 0.25],
+					normal : [0.0, 0.0, 1.0],
+				},
+				Vertex {
+					position : [1.0, 0.0, 0.0],
+					color : [0.0, 0.0, 0.0, 0.25],
+					normal : [0.0, 0.0, 1.0],
+				},
+				Vertex {
+					position : [0.0, 1.0, 0.0],
+					color : [0.0, 0.0, 0.0, 0.25],
+					normal : [0.0, 0.0, 0.0],
+				},
+				Vertex {
+					position : [1.0, 1.0, 0.0],
+					color : [0.0, 0.0, 0.0, 0.25],
+					normal : [0.0, 0.0, 1.0],
+				},
+			];
+
+			let indices : &[u32] = &[
+				0, 1, 2, 1, 2, 3,
+			];
+
+			scene.objects.insert("select_box", Model::new(device, vertices, indices));
+
 		}
 
 		scene
@@ -197,13 +230,13 @@ impl WinState {
 #[derive(Copy, Clone, Debug)]
 struct Vertex {
 	position : [f32; 3],
-	color : [f32; 3],
+	color : [f32; 4],
 	normal : [f32; 3],
 }
 
 impl Vertex {
 
-	fn load_mesh(filename : &str, color : [f32; 3], scale : f32) -> (Vec<Vertex>, Vec<u32>) {
+	fn load_mesh(filename : &str, color : [f32; 4], scale : f32) -> (Vec<Vertex>, Vec<u32>) {
 		let obj = tobj::load_obj(filename, true).expect(format!("{}{}{}\n", "Missing asset :'", filename, "'").as_str());
 
 		let (mut models, _materials) = obj;
@@ -242,7 +275,7 @@ impl Vertex {
 const VERTEX_DESC : wgpu::VertexBufferDescriptor = wgpu::VertexBufferDescriptor {
 	stride : std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
 	step_mode : wgpu::InputStepMode::Vertex,
-	attributes : &wgpu::vertex_attr_array![0 => Float3, 1 => Float3, 2 => Float3],
+	attributes : &wgpu::vertex_attr_array![0 => Float3, 1 => Float4, 2 => Float3],
 };
 
 enum Stage {
